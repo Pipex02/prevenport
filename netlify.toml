@@ -1,0 +1,7 @@
+[build]
+  publish = "apps/home"
+
+[[redirects]]
+  from = "/app"
+  to = "https://app.prevenport.dev"
+  status = 302
