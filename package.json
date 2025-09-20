@@ -1,0 +1,17 @@
+{
+  "name": "prevenport",
+  "version": "0.1.0",
+  "private": true,
+  "packageManager": "pnpm@9.6.0",
+  "scripts": {
+    "dev": "pnpm -r --parallel dev",
+    "dev:home": "pnpm --filter @prevenport/home dev",
+    "dev:app": "pnpm --filter @prevenport/app dev",
+    "build": "pnpm -r run build",
+    "build:home": "pnpm --filter @prevenport/home run build",
+    "build:app": "pnpm --filter @prevenport/app run build",
+    "lint": "pnpm -r run lint",
+    "test": "pnpm -r run test",
+    "preview": "pnpm --filter @prevenport/home run preview"
+  }
+}
