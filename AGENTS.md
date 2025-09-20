@@ -1,86 +1,75 @@
 # Repository Guidelines
 
-This repo tracks the Prevenport frontend described in the PRD (last updated 2025‑09‑16). Monorepo targets **Vite + Tailwind** builds, **Spanish UI**, and **deterministic telemetry mocks** for demos.
+This repo tracks the Prevenport frontend described in the PRD (last updated 2025-09-16). Monorepo targets **Vite + Tailwind** builds, **Spanish UI**, and **deterministic telemetry mocks** for demos.
 
 ## Project Structure & Module Organization
 - `apps/home/`: marketing site for **prevenport.dev**; static assets in `apps/home/public/`. Copy in **Spanish**.
+- `apps/home/netlify.toml`: build command & SPA redirect for the home deployment.
 - `apps/app/`: dashboard SPA for **app.prevenport.dev**.
   - React code under `src/features/{dashboard,vehicles,devices}/`.
-  - Shared hooks/libs in `src/lib/` (e.g., `MockTelemetryProvider.tsx`, `useMockTelemetry.ts`).
-- `apps/app/public/_redirects`: Netlify SPA redirects (`/* /index.html 200`). See Netlify redirects docs. 
-- `packages/ui/` (optional, later): shared Tailwind components; export via barrel files.
-- Docs live at root (`PRD.md`, `AGENTS.md`).
+  - Shared hooks/libs in `src/lib/` (e.g., `mockTelemetry.ts`, future Supabase adapters).
+- `apps/app/netlify.toml`: mirrors home config but targets the dashboard build.
+- `packages/ui/`: shared Tailwind-friendly components; export via barrel files.
+- Docs live at root (`Project Requirements Document...`, `AGENTS.md`, `chatgpt-recomendations.md`).
 
 ## Build, Dev, and Workspace Commands
-> Requires Node 20+ and pnpm (via Corepack).
+> Requires Node 20+ and pnpm. Prefer Corepack so Netlify/CI pick up the same version.
 
 ```bash
-corepack enable && corepack prepare pnpm@10 --activate && pnpm install
-# dev servers (note: filter flag before the command)
-pnpm --filter ./apps/app dev
-pnpm --filter ./apps/home dev
+corepack enable && corepack prepare pnpm@9.6.0 --activate
+pnpm install
+# dev servers (filter selector goes before the command)
+pnpm --filter @prevenport/home dev
+pnpm --filter @prevenport/app dev
 # build all workspaces
 pnpm -r build
-# lint (once config lands)
+# lint / test when configs land
 pnpm lint
+pnpm test
 ```
 
-* **pnpm filtering** syntax reference: `pnpm --filter <selector> <command>`. Use a relative path selector for app folders or the package name once set. ([pnpm.io][1])
-* **Monorepo on Netlify**: configure each site with its **Base directory** (`apps/home`, `apps/app`) in Site settings → Build settings. ([Netlify Docs][2])
-* **SPA redirects**: `_redirects` with `/* /index.html 200`. ([Netlify Docs][6])
+* `packageManager` is pinned in root `package.json`; keep it updated when bumping pnpm.
+* Each app’s Vite build writes to `dist/`; Netlify sites should use Base directory `apps/home` or `apps/app`, Build command `pnpm run build`, Publish directory `dist`. ([Monorepos | Netlify Docs][1])
+
+## Netlify Deployment Checklist
+- Root `netlify.toml` was removed on purpose; config lives beside each app.
+- Ensure `apps/*/netlify.toml` stays in sync (build command `pnpm run build`, SPA redirect `/* /index.html 200`). ([Redirects | Netlify Docs][2])
+- In Netlify UI create **two sites** pointing to this repo:
+  1. Base dir `apps/home` → hostname `www.prevenport.dev` (primary).
+  2. Base dir `apps/app` → hostname `app.prevenport.dev`.
+- Name.com DNS (external):
+  - `www` CNAME → `{home-site}.netlify.app`
+  - `app` CNAME → `{app-site}.netlify.app`
+  - Apex `prevenport.dev` → ANAME `apex-loadbalancer.netlify.com` (or A `75.2.60.5`).
+- Add site-specific env vars (Supabase keys later) via Site settings → Build & deploy → Environment.
 
 ## Coding Style & Naming Conventions
+- TypeScript everywhere; functional React components.
+- 2-space indentation; single quotes; trailing commas where valid.
+- Files: components `PascalCase.tsx`; hooks/utils `camelCase.ts`.
+- Tailwind classes can live inline; extract reusable UI into `packages/ui` when duplication appears.
+- Format via Prettier + ESLint. Run `pnpm lint --fix` before pushing once config is wired.
 
-* TypeScript everywhere; functional React components.
-* 2‑space indentation; single quotes; trailing commas where valid.
-* Files: Components `PascalCase.tsx`; hooks/utils `camelCase.ts`.
-* Tailwind classes can live in JSX; extract repeated UI into `packages/ui/` when it adds value.
-* Prettier + ESLint; `pnpm lint --fix` before pushing.
+## Charting & Telemetry
+- Chart.js setup is manual: import controllers/elements/scales explicitly (`Chart.register(...)`), include `chartjs-adapter-date-fns`, and register `chartjs-plugin-zoom`. ([Chart.js Time Axis][3])
+- Deterministic data via `generateTelemetry(seed, hours)` in `apps/app/src/lib/mockTelemetry.ts`; keep seeds centralized for predictable demos.
+- Auto-refresh interval = 5s when data source is `Mock`; allow toggle scaffolding for Supabase (disabled in v1).
 
-## Charting Conventions (Chart.js via react-chartjs-2)
+## Testing (Roadmap)
+- Preferred stack: Vitest + Testing Library + MSW. Co-locate tests as `*.test.ts(x)` next to source.
+- Coverage focus on `src/features/dashboard` before handing off real telemetry.
 
-* **Time axis** requires a date adapter (we use `chartjs-adapter-date-fns`). ([chartjs.org][3])
-* **Zoom/Pan** via `chartjs-plugin-zoom` (mouse wheel / pinch). Register the plugin. ([chartjs.org][7])
-* **Tree‑shaking**: avoid `import 'chart.js/auto'` in production; import and `Chart.register(...)` only what you use (controllers, elements, scales, plugins). ([chartjs.org][8])
-
-*Minimal example for line + scatter with time scale & zoom:*
-
-```ts
-// charts/setup.ts
-import {
-  Chart, LineController, LineElement, PointElement,
-  ScatterController, CategoryScale, LinearScale, TimeScale, Tooltip, Legend
-} from 'chart.js'
-import zoomPlugin from 'chartjs-plugin-zoom'
-import 'chartjs-adapter-date-fns'
-
-Chart.register(
-  LineController, LineElement, PointElement,
-  ScatterController, CategoryScale, LinearScale, TimeScale,
-  Tooltip, Legend, zoomPlugin
-)
-// In chart options: options.plugins.zoom = { zoom: { wheel: { enabled:true } }, pan: { enabled:true } }
-```
-
-## Mock Data & Environment Notes
-
-* **Deterministic telemetry**: use `MockTelemetryProvider` signatures; centralize seeds to keep dashboards reproducible. (Use `seedrandom` for PRNG; `dayjs` for time windows.) ([npm][9])
-* **Data‑source toggle**: `Mock` (default) | `Supabase` (disabled in v1).
-* **Env vars**: set site variables in Netlify → Project configuration → **Environment variables**. Don’t commit secrets; keep `.env.example` only. Netlify doesn’t read local `.env` during builds unless you import variables. ([Netlify Docs][5])
-
-## Testing (deferred to v2+)
-
-* Tooling suggestions (not required in v1): **Vitest** + **React Testing Library**; **MSW** for API mocks. Keep seeds stable in tests that assert chart rendering. ([Testing Library][10])
-
-## Commit & Pull Request Guidelines
-
-* **Conventional Commits** (`feat:`, `fix:`, `chore:`) for clean history and changelog automation. Reference PRD section in PRs. ([Conventional Commits][11])
-* Small, reviewable branches (`feature/mock-telemetry`, etc.); rebase before PR.
-* PRs include summary, testing notes (if any), screenshots/GIFs for UI updates, and deploy checklist (Netlify context & DNS).
+## Git Hygiene
+- Use Conventional Commits (`feat:`, `fix:`, `chore:`). Reference PRD section in body/PR when applicable.
+- Rebase before raising PRs; keep branches small (`feature/mock-telemetry`, etc.).
+- PRs include: summary, testing notes, screenshots/GIFs for UI work, deploy checklist (Netlify site & DNS status).
 
 ## Product UX Notes (v1)
+- Spanish UI copy across landing and app.
+- Login button opens "Próximamente" modal until Supabase auth lands.
+- Vehicles view: Reach Stacker & Tractocamión cards with status badge, alert count, mock "time since last fault".
+- Devices view: two RPi cards with status and mock "Conectar" action.
 
-* **Language**: Spanish UI.
-* **Login**: keep a visible button that opens a **“Próximamente / Coming soon”** modal.
-* **Vehicles view**: 2 cards (Reach Stacker, Tractocamión) with state badge (Online/Offline/Delay), active alerts count, and time since last fault (mock).
-* **Devices view**: 2 RPi cards with status and **Conectar** (mock) action.
+[1]: https://docs.netlify.com/build/configure-builds/monorepos/
+[2]: https://docs.netlify.com/manage/routing/redirects/overview/
+[3]: https://www.chartjs.org/docs/latest/axes/cartesian/time.html
