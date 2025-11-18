@@ -1,29 +1,28 @@
 # ---------- Build stage ----------
 FROM node:20-alpine AS build
 
-# Work in /app
+# Work in /app (root of repo)
 WORKDIR /app
 
-# Copy the whole repo (simplest & safest for now)
+# Copy the whole repo
 COPY . .
 
-# Move into your landing page app
-WORKDIR /apps/home
+# NOW move into your landing page app (relative to /app)
+WORKDIR /app/apps/home
 
 # Install deps for this app only
 RUN npm install
 
-# Build Vite app (uses your existing "build" script)
+# Build Vite app
 RUN npm run build
 
 # ---------- Runtime stage ----------
 FROM nginx:alpine
 
 # Copy built files to Nginx html dir
-COPY --from=build /apps/home/dist /usr/share/nginx/html
+COPY --from=build /app/apps/home/dist /usr/share/nginx/html
 
 # Expose HTTP port
 EXPOSE 80
 
-# Start Nginx
 CMD ["nginx", "-g", "daemon off;"]
